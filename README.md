@@ -1,4 +1,4 @@
-# Customer Churn Prediction System
+# Telecom-customer-churn-risk-analysis
 
 ## Overview
 
