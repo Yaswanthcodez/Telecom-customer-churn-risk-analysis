@@ -1,74 +1,147 @@
-import streamlit as st
+from pathlib import Path
+
 import joblib
 import pandas as pd
+import streamlit as st
+
+st.set_page_config(page_title="Telecom Churn Risk", page_icon="📊", layout="centered")
+
+MODEL_PATH = Path(__file__).with_name("churn_model.pkl")
+CHURN_THRESHOLD = 0.4
+HIGH_RISK_THRESHOLD = 0.7
+
 
 @st.cache_resource
 def load_model():
-    return joblib.load("churn_model.pkl")
+    if not MODEL_PATH.is_file():
+        raise FileNotFoundError(
+            f"Model file not found: {MODEL_PATH}. Run the model-export section in Customer_Churn_01.ipynb first."
+        )
+    return joblib.load(MODEL_PATH)
 
-model=load_model()
 
-st.title("CUSTOMER CHURN PREDICTION")
+model = load_model()
 
-#CUSTOMER DETAILS
-st.subheader("Customer Details")
-gender=st.selectbox("Gender",["Male","Female"])
-senior=st.selectbox("SeniorCitizen",["Yes","No"])
-partner=st.selectbox("Partner",["Yes","No"])
-dependents=st.selectbox("Dependents",["Yes","No"])
+st.title("Telecom Customer Churn Risk")
+st.caption(
+    "Logistic-regression pipeline · Churn is predicted at a probability threshold of 40%."
+)
+st.info(
+    "Risk bands: Low below 40%, Medium from 40% to below 70%, and High at or above 70%. "
+    "The churn prediction cutoff is 40%."
+)
 
-if senior=="Yes":
-    senior=1
-else:
-    senior=0
+with st.form("customer_details"):
+    st.subheader("Customer details")
+    left, right = st.columns(2)
+    with left:
+        gender = st.selectbox("Gender", ["Female", "Male"])
+        senior_citizen = st.selectbox("Senior citizen", ["No", "Yes"])
+        partner = st.selectbox("Has a partner", ["No", "Yes"])
+        dependents = st.selectbox("Has dependents", ["No", "Yes"])
+        tenure = st.number_input("Tenure (months)", min_value=0, max_value=72, step=1)
+    with right:
+        phone_service = st.selectbox("Phone service", ["Yes", "No"])
+        multiple_lines = st.selectbox(
+            "Multiple lines", ["No", "Yes", "No phone service"]
+        )
+        contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
+        paperless_billing = st.selectbox("Paperless billing", ["Yes", "No"])
 
-st.subheader("Phone Services")
-#PHONE SERVICES
-phone=st.selectbox("PhoneService",["Yes","No"])
-mul_lines=st.selectbox("MultipleLines",["Yes","No","No phone service"])
+    st.subheader("Services")
+    left, right = st.columns(2)
+    with left:
+        internet_service = st.selectbox(
+            "Internet service", ["DSL", "Fiber optic", "No"]
+        )
+        online_security = st.selectbox(
+            "Online security", ["No", "Yes", "No internet service"]
+        )
+        online_backup = st.selectbox(
+            "Online backup", ["No", "Yes", "No internet service"]
+        )
+        device_protection = st.selectbox(
+            "Device protection", ["No", "Yes", "No internet service"]
+        )
+    with right:
+        tech_support = st.selectbox(
+            "Tech support", ["No", "Yes", "No internet service"]
+        )
+        streaming_tv = st.selectbox(
+            "Streaming TV", ["No", "Yes", "No internet service"]
+        )
+        streaming_movies = st.selectbox(
+            "Streaming movies", ["No", "Yes", "No internet service"]
+        )
+        payment_method = st.selectbox(
+            "Payment method",
+            [
+                "Electronic check",
+                "Mailed check",
+                "Bank transfer (automatic)",
+                "Credit card (automatic)",
+            ],
+        )
 
-st.subheader("Internet Services")
-#INTERNET SERVICES
-internet=st.selectbox("InternetService",["DSL","Fiber optic","No internet service"])
-online_security=st.selectbox("OnlineSecurity",["Yes","No","No internet service"])
-online_backup=st.selectbox("OnlineBackup",["Yes","No","No internet service"])
-device_protection=st.selectbox("DeviceProtection",["Yes","No","No internet service"])
-tech_support=st.selectbox("TechSupport",["Yes","No","No internet service"])
-streaming_tv=st.selectbox("StreamingTV",["Yes","No","No internet service"])
-streaming_movies=st.selectbox("StreamingMovies",["Yes","No","No internet service"])
+    st.subheader("Monthly charges")
+    left, right = st.columns(2)
+    with left:
+        monthly_charges = st.number_input(
+            "Monthly charges ($)", min_value=0.0, max_value=200.0, value=70.0, step=0.01
+        )
+    with right:
+        total_charges = st.number_input(
+            "Total charges ($)",
+            min_value=0.0,
+            value=float(tenure * monthly_charges),
+            step=0.01,
+        )
 
-st.subheader("Billing Information")
-#CONTRACT AND BILLING
-tenure=st.number_input("Tenure",min_value=0,step=1)
-contract=st.selectbox("Contract",["Month-to-month","One year","Two year"])
-paperless_bill=st.selectbox("PaperlessBilling",["Yes","No"])
-payment_method=st.selectbox("PaymentMethod",["Electronic check","Mailed check","Bank transfer (automatic)","Credit card (automatic)"])
-monthly_charges=st.number_input("MonthlyCharges",min_value=0)
-total_charges=st.number_input("TotalCharges",min_value=0,value=tenure*monthly_charges)
+    submitted = st.form_submit_button("Assess churn risk", type="primary")
 
-if st.button("PREDICT"):
-    input_df=pd.DataFrame({"tenure":[tenure],"Contract":[contract],"PaperlessBilling":[paperless_bill],"PaymentMethod":[payment_method],"MonthlyCharges":[monthly_charges],"TotalCharges":[total_charges],
-                           "InternetService":[internet],"OnlineSecurity":[online_security],"OnlineBackup":[online_backup],"DeviceProtection":[device_protection],"TechSupport":[tech_support],"StreamingTV":[streaming_tv],"StreamingMovies":[streaming_movies],
-                           "PhoneService":[phone],"MultipleLines":[mul_lines],
-                           "gender":[gender],"Partner":[partner],"SeniorCitizen":[senior],"Dependents":[dependents]})
-    #st.write(input_df.dtypes)
-    prob=model.predict_proba(input_df)[0][1]
-    threshold=0.4
-    if prob>=threshold:
-        prediction="Churn"
+if submitted:
+    customer = pd.DataFrame(
+        {
+            "gender": [gender],
+            "SeniorCitizen": [1 if senior_citizen == "Yes" else 0],
+            "Partner": [partner],
+            "Dependents": [dependents],
+            "tenure": [tenure],
+            "PhoneService": [phone_service],
+            "MultipleLines": [multiple_lines],
+            "InternetService": [internet_service],
+            "OnlineSecurity": [online_security],
+            "OnlineBackup": [online_backup],
+            "DeviceProtection": [device_protection],
+            "TechSupport": [tech_support],
+            "StreamingTV": [streaming_tv],
+            "StreamingMovies": [streaming_movies],
+            "Contract": [contract],
+            "PaperlessBilling": [paperless_billing],
+            "PaymentMethod": [payment_method],
+            "MonthlyCharges": [monthly_charges],
+            "TotalCharges": [total_charges],
+        }
+    )
+
+    churn_probability = float(model.predict_proba(customer)[0, 1])
+    churn_prediction = churn_probability >= CHURN_THRESHOLD
+    if churn_probability >= HIGH_RISK_THRESHOLD:
+        risk_level = "High"
+    elif churn_prediction:
+        risk_level = "Medium"
     else:
-        prediction="Stay"
+        risk_level = "Low"
 
-    st.header("Prediction")
-    st.write(f"Prediction :{prediction}")
-    st.write(f"Churn Probability :{prob:.2%}")
+    st.subheader("Assessment")
+    metric_left, metric_middle, metric_right = st.columns(3)
+    metric_left.metric("Churn probability", f"{churn_probability:.1%}")
+    metric_middle.metric("Risk level", risk_level)
+    metric_right.metric("Prediction", "Churn" if churn_prediction else "Stay")
 
-    if prob>=0.8:
-        risk="High"
-    elif prob>=0.6:
-        risk="Medium"
+    if churn_prediction:
+        st.warning(
+            "This customer is above the selected churn threshold. Consider reviewing them for retention outreach."
+        )
     else:
-        risk="Low"
-    
-    st.write(f"Risk Level : {risk}")
-    
+        st.success("This customer is below the selected churn threshold.")
