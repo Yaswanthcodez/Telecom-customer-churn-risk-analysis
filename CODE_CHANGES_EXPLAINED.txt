@@ -1,0 +1,263 @@
+CODE CHANGES EXPLAINED
+=====================
+
+This guide explains the main code concepts used in the updated churn notebook
+and Streamlit app. The aim is to explain what the code does and why it is
+useful, not just list Python names.
+
+
+FILES AND PROJECT STRUCTURE
+---------------------------
+
+Customer_Churn_01.ipynb
+    The notebook is arranged as numbered stages. Each stage ends with a
+    Markdown recap. It covers data inspection, cleaning, exploration,
+    preprocessing, model comparison, threshold selection, error review, LIME
+    and SHAP explanations, model export, and final results.
+
+app.py
+    The Streamlit user interface collects one customer's information, passes
+    it to the saved model, and shows churn probability, a prediction, and a
+    risk band.
+
+churn_model.pkl
+    A saved copy of the fitted preprocessing-and-logistic-regression pipeline.
+    It lets the app predict without fitting the model again each time it opens.
+
+README.md
+    Describes the data location, analysis steps, results, explainers, and how
+    to run the notebook or app.
+
+requirements.txt
+    Lists the Python libraries needed by the notebook and app. pandas, NumPy,
+    scikit-learn, and joblib are pinned to the versions used for the saved
+    model. LIME and SHAP are included because the notebook uses both explainers.
+
+
+NOTEBOOK AND DATA HANDLING
+--------------------------
+
+Markdown cells
+    Markdown is formatted notebook text, not Python code. Section headings say
+    what the next block does. Each section summary restates its result in plain
+    language.
+
+display(...)
+    `display` is a Jupyter notebook function that renders tables and other rich
+    objects. For example, `display(df.head())` shows a formatted table of the
+    first rows. It is like `print`, but better for notebook output. It is not
+    automatically available in a regular `.py` script.
+
+Path(...), .is_file(), and .resolve()
+    `Path` represents a file location. `.is_file()` checks whether a file
+    exists, and `.resolve()` shows its full path. The notebook searches the
+    project folder and then a nearby DATASET folder, instead of requiring one
+    person's fixed absolute file path.
+
+next((path for path in paths if path.is_file()), None)
+    This picks the first candidate data path that exists. If none exists, the
+    notebook raises a `FileNotFoundError` that tells the user what to do.
+
+pd.to_numeric(..., errors="coerce").fillna(0)
+    Converts `TotalCharges` to numbers. A blank string cannot be a number, so
+    `errors="coerce"` turns it into a missing value (`NaN`). `.fillna(0)` then
+    replaces that missing total with zero, matching the project's assumption
+    about very new accounts without a billed total yet.
+
+value_counts(), reindex(), crosstab(), and groupby()
+    These pandas methods summarize groups. `value_counts()` counts churn labels;
+    `reindex()` fixes their display order. `pd.crosstab()` compares two
+    categories, and `normalize="index"` converts each row to proportions.
+    `groupby(...).median()` compares a numeric median for each churn group.
+
+
+PLOTS AND SEABORN
+-----------------
+
+sns.set_theme(style="whitegrid")
+    `sns` is the usual short name for Seaborn. `set_theme` sets the default
+    appearance of later Seaborn charts. `whitegrid` adds a light grid so chart
+    values are easier to compare. This affects how figures look; it does not
+    change the data or model.
+
+Matplotlib subplots
+    `fig, axes = plt.subplots(1, 2, ...)` makes one figure with two chart
+    areas. A plotting function receives `ax=axes[0]` or `ax=axes[1]` to choose
+    the area where it draws.
+
+Seaborn chart functions
+    `countplot` compares counts, `histplot` shows distributions, `boxplot`
+    compares numeric ranges, `barplot` compares group averages, and `heatmap`
+    colors a matrix. `plt.show()` displays the completed charts in a notebook.
+
+
+MODEL PREPARATION AND CHECKING
+------------------------------
+
+train_test_split(..., stratify=y, random_state=42)
+    Divides rows into a training set and a separate test set. `stratify=y`
+    keeps about the same churn percentage in both sets. `random_state=42` makes
+    the split repeatable.
+
+ColumnTransformer
+    Applies different preparation to different columns. This notebook
+    standardizes tenure and charges, and one-hot encodes the category columns.
+
+StandardScaler
+    Scales numeric measurements so large dollar values do not dominate small
+    values such as tenure. It learns its averages and scales from training data.
+
+OneHotEncoder(handle_unknown="ignore")
+    Turns a category into zero/one indicator columns. For example, contract
+    types become separate columns. `handle_unknown="ignore"` allows prediction
+    to continue if a future category was not present when the model was trained.
+
+Pipeline
+    Chains preprocessing and a model into one reusable object. Training and
+    prediction use the same transformations. It also keeps preprocessing from
+    being fitted on the held-out test data.
+
+cross_val_score(..., cv=5, scoring="recall")
+    Repeats model evaluation on five folds of the training data. The score is
+    churn recall: the fraction of actual churners found. The final holdout set
+    is not used for this cross-validation.
+
+predict_proba()
+    Returns the model's estimated probability for each class. The notebook and
+    app use the churn probability (class 1) for their decision.
+
+Probability threshold of 0.4
+    A threshold changes a probability into a Yes/No prediction. Lowering the
+    threshold usually finds more churners (higher recall), but flags more
+    customers who stay (more false positives and lower precision). The 0.4
+    value was selected to prioritize finding churners.
+
+Accuracy, precision, recall, and confusion matrix
+    Accuracy is the share of all predictions that are correct. Precision asks
+    how many customers flagged as churners actually churned. Recall asks how
+    many actual churners the model found. A confusion matrix shows correct and
+    incorrect counts for both classes.
+
+get_feature_names_out() and coefficients
+    The preprocessor creates extra one-hot columns. `get_feature_names_out()`
+    retrieves their names. Logistic-regression coefficients show which
+    features raise or lower the model's churn score. These are learned
+    associations, not proof that the feature causes churn.
+
+Boolean mask for false negatives
+    `(y_test == 1) & (y_pred == 0)` selects customers who churned but were
+    predicted to stay. Reviewing these rows helps describe what the model
+    misses.
+
+
+LIME: EXPLAIN ONE CUSTOMER
+--------------------------
+
+LIME means Local Interpretable Model-agnostic Explanations. It explains one
+prediction by making small changes around one customer and checking how the
+prediction changes. The result is a short list of feature conditions and their
+local contributions.
+
+Preprocessed features
+    The model receives scaled numbers and one-hot category columns, not the
+    original text categories. The notebook transforms the train and test rows
+    with the already-fitted preprocessor, then passes the matching feature
+    names to both explainers.
+
+Sparse matrix and make_dense()
+    One-hot data is mostly zeros, so scikit-learn may store it in a memory
+    saving sparse matrix. Some explainers are easier to use with a regular
+    NumPy array. `make_dense()` calls `.toarray()` only when that method exists;
+    otherwise it uses `np.asarray()`. This works whether the preprocessor
+    returns sparse or dense data.
+
+LimeTabularExplainer(...)
+    Creates an explainer from training examples. `class_names` labels the
+    output classes. `mode="classification"` says the model predicts classes.
+    `random_state=42` makes the perturbation sampling repeatable.
+
+explain_instance(..., explain_model.predict_proba)
+    Explains one held-out transformed customer. The explainer gets the fitted
+    classifier's `predict_proba` because the input is already transformed. The
+    full pipeline expects original named columns instead.
+
+as_list() and as_pyplot_figure()
+    `as_list()` returns the feature conditions and their contribution values
+    for a table. `as_pyplot_figure()` produces the corresponding local chart.
+
+
+SHAP: EXPLAIN FEATURE CONTRIBUTIONS
+------------------------------------
+
+SHAP means SHapley Additive exPlanations. It assigns each feature a
+contribution relative to a background set of typical examples. The notebook
+uses `LinearExplainer` because the final estimator is logistic regression.
+
+Background and explained examples
+    Up to 100 training examples form the background reference. Up to 200
+    held-out examples are explained to keep plotting responsive. The reference
+    rows come from training data, not the test labels.
+
+DataFrame columns for SHAP
+    The transformed arrays are wrapped in pandas DataFrames with the exact
+    ColumnTransformer feature names. This lets SHAP attach names to the
+    contributions, including the `numeric__tenure` name used in the tenure
+    scatter plot.
+
+shap.plots.beeswarm(...)
+    Summarizes contribution values across many customers. Each dot represents
+    one customer-feature contribution; features are ordered by overall impact.
+
+shap.plots.waterfall(...)
+    Explains one customer's score. It starts at a baseline score and shows
+    which features move that customer's score toward or away from churn.
+
+shap.plots.scatter(...)
+    Shows how the value of one feature relates to its SHAP contribution across
+    the explained customers. Here it focuses on tenure.
+
+LIME and SHAP describe how this fitted model behaves. They do not prove a
+feature causes churn, and they do not guarantee explanations will be identical
+for every customer or model version.
+
+
+SAVING THE MODEL AND STREAMLIT APP
+---------------------------------
+
+joblib.dump(pipe, model_path)
+    Saves the complete fitted pipeline as `churn_model.pkl`. The app loads this
+    saved model rather than fitting a new model every time it starts.
+
+Path(__file__).with_name("churn_model.pkl")
+    In `app.py`, `__file__` is the location of the app script. `with_name` finds
+    the model file beside it, regardless of the shell's current folder.
+
+@st.cache_resource
+    A Streamlit decorator that caches a model or other large resource. It
+    avoids loading the same model again on every app interaction.
+
+st.form and st.form_submit_button
+    Groups input controls so prediction runs when the user submits the form,
+    not every time they change one selection.
+
+st.selectbox and st.number_input
+    Provide controlled category choices and numeric fields. Controlled choices
+    help ensure that app inputs match the categories supported by the model.
+
+pd.DataFrame({...})
+    Creates the one-row customer table sent to the model. Column names must
+    match the training features. SeniorCitizen is converted from the app's
+    Yes/No choice into 1/0 because the source data stores it as a number.
+
+Risk bands
+    The prediction cutoff is 0.4. Risk labels are Low below 0.4, Medium from
+    0.4 up to (but not including) 0.7, and High at 0.7 or above. This keeps a
+    predicted churn case from being labeled Low risk.
+
+
+DEPENDENCIES
+------------
+
+The notebook and app use pandas, NumPy, scikit-learn, joblib, Matplotlib,
+Seaborn, Streamlit, LIME, and SHAP. Run `python -m pip install -r
+requirements.txt` to install the listed dependencies.

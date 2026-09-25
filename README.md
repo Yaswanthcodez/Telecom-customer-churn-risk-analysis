@@ -31,8 +31,9 @@ The notebook follows this sequence, with a Markdown section summary after every 
 5. Compare logistic regression, decision tree, and random forest.
 6. Compare probability thresholds and select 0.4 to prioritize churn recall.
 7. Review the confusion matrix, false negatives, and logistic-regression coefficients.
-8. Export the fitted pipeline for Streamlit.
-9. Report final holdout metrics and summarize the work.
+8. Explain one prediction with LIME and compare feature contributions with SHAP.
+9. Export the fitted pipeline for Streamlit.
+10. Report final holdout metrics and summarize the work.
 
 Preprocessing and estimation are kept in scikit-learn pipelines. Numerical charges and tenure are standardized; categorical variables are one-hot encoded with unknown categories ignored.
 
@@ -50,6 +51,10 @@ The recorded stratified 80/20 holdout run selected logistic regression at a chur
 | False positives | 190 |
 
 At the default threshold of 0.5, recorded recall was 55.9% and precision was 65.7%. The 0.4 threshold finds more churners while increasing false positives. Metrics are recomputed in the notebook and can vary with data or library versions. They describe predictive performance, not causal effects.
+
+## Explainable AI
+
+The notebook includes both explainers. LIME gives a local explanation for one held-out customer. SHAP shows feature contributions across a test subset and for an individual prediction. Both explainers receive the same preprocessed, one-hot-encoded feature space used by the fitted model. The Streamlit app uses the model for predictions; explanations are explored in the notebook.
 
 ## Run locally
 
@@ -71,8 +76,8 @@ The app uses the 0.4 decision threshold. Its risk labels are Low below 0.4, Medi
 
 ## Dependencies and implementation
 
-Python, pandas, NumPy, Matplotlib, Seaborn, scikit-learn, joblib, and Streamlit.
-The pandas, NumPy, scikit-learn, and joblib versions are pinned in `requirements.txt` to match the serialized model artifact.
+Python, pandas, NumPy, Matplotlib, Seaborn, scikit-learn, joblib, Streamlit, LIME, and SHAP.
+The pandas, NumPy, scikit-learn, joblib, LIME, and SHAP versions are pinned in `requirements.txt` to match the serialized model artifact and tested explainer APIs.
 
 ## Live demo
 
